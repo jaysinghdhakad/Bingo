@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./libBoard.sol";
+import "./Ibingo.sol";
 
 // 1  3  5  7  2
 // 11 23 11 45 56
@@ -18,7 +19,7 @@ import "./libBoard.sol";
 // drawnNumbers [8, 34, 1, 23, 9, 7, 11]
 
 // TODO: Create IBingoInterface
-contract Bingo is Ownable {
+contract Bingo is Ownable, Ibingo {
     using SafeERC20 for IERC20;
     using Board for uint256;
 
@@ -75,12 +76,17 @@ contract Bingo is Ownable {
     event Draw(uint256 indexed gameIndex, uint256 indexed numberDrawn);
     event GameOver(uint256 indexed gameIndex, address winner);
 
+    /// @param _feeToken address of fee token to be set
+    /// @param _entryFee the entry fee per user per game 
+    /// @param _minJoinDuration the min duration between start of the game and first draw
+    /// @param  _minTurnDuration the min duration between two consecutive draws
     constructor(address _feeToken, uint256 _entryFee, uint256 _minJoinDuration, uint256 _minTurnDuration) Ownable() {
         feeToken = IERC20(_feeToken);
         entryFee = _entryFee;
         minJoinDuration = _minJoinDuration;
         minTurnDuration = _minTurnDuration;
     }
+
     // TODO: add admin functions
 
     /// @notice updated the minumum join duration before game can start

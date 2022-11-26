@@ -1,27 +1,17 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.17;
-pragma experimental ABIEncoderV2;
-
+pragma solidity =0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./libBoard.sol";
-import "./Ibingo.sol";
 
-// 1  3  5  7  2
-// 11 23 11 45 56
-// 34 24 *  4  6
-// 23 1  5  7  9
-// 8  12 17 28 40
+import "contracts/interfaces/IBingo.sol";
+import "contracts/libs/libMask.sol";
 
-// drawnindexes [2,6, 1,3,0]
-// drawnNumbers [8, 34, 1, 23, 9, 7, 11]
-
-// TODO: Create IBingoInterface
-contract Bingo is Ownable, Ibingo {
+// TODO: add dev comments
+contract BingoGame is Ownable, IBingo {
     using SafeERC20 for IERC20;
-    using Board for uint256;
+    using libMask for uint256;
 
     struct GameData {
         bool isGameComplete;
@@ -45,9 +35,12 @@ contract Bingo is Ownable, Ibingo {
     uint256[5] private _PATTERN_INDEX_11 = [1,7,0,18,24];
     uint256[5] private _PATTERN_INDEX_12 = [5,9,0,16,20];
 
+    // only first 24 bytes are stored but using bytes32 saves type conversion costs during operations
+    // gameId => player's Address => board
+    mapping(uint256 => mapping(address => bytes32)) private _playerBoard; //TODO: explore bytes
+    //TODO: readable getter
 
     uint256 public entryFee;
-
     IERC20 public immutable feeToken;
 
     // Host cannot start draw for the first time in a game until this duration is complete
@@ -61,20 +54,15 @@ contract Bingo is Ownable, Ibingo {
 
     // gameID => game 
     mapping(uint256 => GameData) public games;
-
-    // only first 24 bytes are stored but using bytes32 saves type conversion costs during operations
-    // gameId => player's Address => board
-    mapping(uint256 => mapping(address => bytes32)) private _playerBoard; //TODO: explore bytes
-    //TODO: readable getter
    
    // TODO: add events
     event GameCreated(uint256 indexed gameId);
     event JoinDurationUpdated(uint256 indexed newMinJoinDuration);
     event TurnDurationUpdated(uint256 indexed newMinTurnDuration);
     event EntryFeeUpdated(uint256 indexed newEntryFee);
-    event PlayerJoined(address indexed player, uint256 indexed _gameIndex );
-    event Draw(uint256 indexed gameIndex, uint256 indexed numberDrawn);
-    event GameOver(uint256 indexed gameIndex, address winner);
+    event PlayerJoined(uint256 indexed gameIndex, address indexed player);
+    event Draw(uint256 indexed gameIndex, uint256 numberDrawn);
+    event GameOver(uint256 indexed gameIndex, address indexed winner);
 
     /// @param _feeToken address of fee token to be set
     /// @param _entryFee the entry fee per user per game 
@@ -87,7 +75,7 @@ contract Bingo is Ownable, Ibingo {
         minTurnDuration = _minTurnDuration;
     }
 
-    // TODO: add admin functions
+    // Admin functions
 
     /// @notice updated the minumum join duration before game can start
     /// @param _newMinJoinDuration new minimum join duration to set 
@@ -116,8 +104,11 @@ contract Bingo is Ownable, Ibingo {
     /// @notice returns the board of a player for a game
     /// @param  _gameIndex index of the game to of which the user wants their board
     /// @return board in bytes32 fformat.
-    function getBoard(uint256 _gameIndex) external view returns(bytes32){
-        return bytes32(_playerBoard[_gameIndex][msg.sender]);
+    function getBoard(uint256 _gameIndex, address _player) external view returns(uint8[24] _board){
+        bytes32 boardBytes = _playerBoard[_gameIndex][_player];
+
+        // TODO: complete
+        board = [boardBytes[0], boardBytes[1], boardBytes[2], ...];
     }
 
     /// @notice creates a game of bingo 
@@ -125,31 +116,29 @@ contract Bingo is Ownable, Ibingo {
     function createGame() external {
         gameCount++; // First game index is 1
         games[gameCount].startTime = block.timestamp;
+        // entryFee for a game cannot be changed once a game is created
         games[gameCount].gameEntryFee = entryFee;
+
         emit GameCreated(gameCount);
     }
 
     /// @notice function to join a game.
     /// @param _gameIndex index of the game to join
     function joinGame(uint256 _gameIndex) external {
-        // TODO: add check current timestamp is greater than game start time (Game exists)
         GameData memory game = games[_gameIndex];
-        require(!game.isGameComplete, "Bingo: Game already finished");
-        require(block.timestamp > game.startTime, "Bingo: Game not started yet");
-        // TODO: add check first draw has not been done
-        require(game.drawnNumbers.length == 0, "Bingo: Game already begain");
-        require(_playerBoard[_gameIndex][msg.sender] == bytes32(0), "Bingo: Player already joined");
-        // generate board
-        // maximum number of boards that can be created in a game = 2^256
-        // board Index starts from 0 (changed)
-        // playerCount is used to ensure that no board collision happens in a single block in a game
-        // Assumption: since this is assumed to be a good source of randomness blockhash(block.number - 1) should not produce same board between two games in a block
-        // otherwise we should use chainlink orcles for true randomness
-        // TODO: mask la        // update draw timestamp
-        // emit eventst 8 bytes
+        require(!game.isGameComplete, "Bingo: game over");
+        require(block.timestamp > game.startTime, "Bingo: game not created");
+        require(game.drawnNumbers.length == 0, "Bingo: game in progress");
+        require(_playerBoard[_gameIndex][msg.sender] == bytes32(0), "Bingo: cannot join twice");
+
         uint256 playerCount = game.playerCount;
         bytes32 blockHash = blockhash(block.number - 1);
-        uint256 boardBase = uint256(keccak256(abi.encodePacked(blockHash, playerCount))); // TODO: reduce state reads when function is complete
+
+        // board Index starts from 0
+        // playerCount is used to ensure that no board collision happens in a single block for a given gameIndex
+        // gameIndex is used to achieve different boards with saame player count and block number
+        uint256 boardBase = uint256(keccak256(abi.encodePacked(blockHash, playerCount, _gameIndex)));
+        
         uint256 board = boardBase.maskBoard();
         _playerBoard[_gameIndex][msg.sender] = bytes32(board);
         games[_gameIndex].playerCount++;
@@ -175,7 +164,7 @@ contract Bingo is Ownable, Ibingo {
     /// @param _gameIndex index of the game to join
     /// @param patternIndex indexs of the patter which is user has marked for bingo
     /// @param drawnIndexes indexs of the number which are drawn to mark the bingo pattern.
-    function callBingo(uint256 _gameIndex, uint256 patternIndex, uint256[5] calldata drawnIndexes) public {
+    function bingo(uint256 _gameIndex, uint256 patternIndex, uint256[5] calldata drawnIndexes) public {
         uint256[5] memory pattern;
         address sender = msg.sender;
         if (patternIndex == 1) {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.17;
+pragma solidity =0.8.17;
 
-interface Ibingo {
+interface IBingoGame {
     function getBoard(uint256 _gameIndex) external view returns(bytes32);
 
     function joinGame(uint256 _gameIndex) external;

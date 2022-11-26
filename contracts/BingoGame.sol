@@ -197,7 +197,8 @@ contract BingoGame is Ownable, IBingo {
 
         GameData memory game = games[_gameIndex];
         bytes32 board = _playerBoard[_gameIndex][sender];
-        for(uint256 i; i < pattern.length; i++){
+        uint256 patternLength = (_patternIndex == 3 || _patternIndex == 8 || _patternIndex == 11 || _patternIndex == 12) ? 4:5;
+        for(uint256 i; i < patternLength; i++){
             uint256 boardNumberIndex = pattern[i];
             uint256 drawNumberIndex = drawnIndexes[i];
             if(boardNumberIndex != 0){

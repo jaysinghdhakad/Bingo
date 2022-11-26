@@ -137,13 +137,12 @@ contract BingoGame is Ownable, IBingo {
         // board Index starts from 0
         // playerCount is used to ensure that no board collision happens in a single block for a given gameIndex
         // gameIndex is used to achieve different boards with saame player count and block number
-        uint256 boardBase = uint256(keccak256(abi.encodePacked(blockHash, playerCount, _gameIndex)));
-        
-        uint256 board = boardBase.maskBoard();
-        _playerBoard[_gameIndex][msg.sender] = bytes32(board);
+        _playerBoard[_gameIndex][msg.sender] = keccak256(abi.encodePacked(blockHash, playerCount, _gameIndex)).keepFirst24Bytes();
         games[_gameIndex].playerCount++;
+
         feeToken.safeTransferFrom(msg.sender, address(this), entryFee);
-        emit PlayerJoined(msg.sender, _gameIndex);
+
+        emit PlayerJoined(_gameIndex, msg.sender);
     }
 
     /// @notice function to draw a number for a game.
@@ -152,11 +151,12 @@ contract BingoGame is Ownable, IBingo {
         uint256 currentTime = block.timestamp;
         GameData storage game = games[_gameIndex];
 
-        game.drawnNumbers.length != 0 ? require(currentTime >= game.lastDrawTime + minTurnDuration, "Bingo: to early to draw") : require(currentTime >= game.startTime + minJoinDuration, "Bingo: Game not started yet");
+        game.drawnNumbers.length != 0 ? require(currentTime >= game.lastDrawTime + minTurnDuration, "Bingo: wait for next turn") : require(currentTime >= game.startTime + minJoinDuration, "Bingo: game not started");
 
-        uint8 numberDrawn = uint8(blockhash(block.number - 1)[0]);
+        uint256 numberDrawn = uint256(blockhash(block.number - 1)[0]);
         game.drawnNumbers.push(numberDrawn);
         game.lastDrawTime = currentTime;
+
         emit Draw(_gameIndex, numberDrawn);
     }
 
@@ -164,7 +164,7 @@ contract BingoGame is Ownable, IBingo {
     /// @param _gameIndex index of the game to join
     /// @param patternIndex indexs of the patter which is user has marked for bingo
     /// @param drawnIndexes indexs of the number which are drawn to mark the bingo pattern.
-    function bingo(uint256 _gameIndex, uint256 patternIndex, uint256[5] calldata drawnIndexes) public {
+    function bingo(uint256 _gameIndex, uint256 _patternIndex, uint256[5] calldata _drawnIndexes) public {
         uint256[5] memory pattern;
         address sender = msg.sender;
         if (patternIndex == 1) {

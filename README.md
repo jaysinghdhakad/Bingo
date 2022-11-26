@@ -1,14 +1,19 @@
-# Sample Hardhat Project
+# Metastreet Test Task
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+This project is a solution to the test task mentioned here: https://metastreet.notion.site/Bingo-Game-Exercise-7cf88465dbb94da0811651d240aa6948
 
-Try running some of the following tasks:
+## Project setup
 
-```shell
-npx hardhat help
-npx hardhat test
-GAS_REPORT=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.js
+```sh
+cd path/to/directory
+
+npm i
 ```
-# Bingo
+
+## Run tests with gas coverage report
+
+```sh
+npm test
+```
+
+// TODO: add other commands

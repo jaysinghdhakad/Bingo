@@ -46,18 +46,23 @@ contract Bingo is Ownable {
 
 
     uint256 public entryFee;
+
     IERC20 public immutable feeToken;
+
     // Host cannot start draw for the first time in a game until this duration is complete
     // All the players participating in the game should join before first draw
     uint256 public minJoinDuration;
+
     // Host needs to wait for this duration between two consecutive draws
     uint256 public minTurnDuration;
 
     uint256 public gameCount;
-    // gameID => game
-    mapping(uint256 => GameData) public games;
-    // only first 24 bytes are stored but using bytes32 saves type conversion costs during operations
 
+    // gameID => game 
+    mapping(uint256 => GameData) public games;
+
+    // only first 24 bytes are stored but using bytes32 saves type conversion costs during operations
+    // gameId => player's Address => board
     mapping(uint256 => mapping(address => bytes32)) private _playerBoard; //TODO: explore bytes
     //TODO: readable getter
    
@@ -77,30 +82,49 @@ contract Bingo is Ownable {
         minTurnDuration = _minTurnDuration;
     }
     // TODO: add admin functions
+
+    /// @notice updated the minumum join duration before game can start
+    /// @param _newMinJoinDuration new minimum join duration to set 
+    /// only owner can executed this function
     function updateMinJoinDuration(uint256 _newMinJoinDuration) external onlyOwner() {
         minJoinDuration = _newMinJoinDuration;
         emit JoinDurationUpdated(_newMinJoinDuration);
     }
+
+    /// @notice updated the minumum turn duration between 2 consicutive
+    /// @param _newMinTurnDuration new minumum turn duration to set 
+    /// only owner can executed this function
     function updateMinTurnDuration(uint256 _newMinTurnDuration) external onlyOwner() {
         minTurnDuration = _newMinTurnDuration;
         emit TurnDurationUpdated(_newMinTurnDuration);
     }
 
+    /// @notice updated the entry fee for a player to join a game 
+    /// @param _newEntryFee new entry fee
+    /// only owner can executed this function
     function updateEntryFee(uint256 _newEntryFee) external onlyOwner() {
         entryFee = _newEntryFee;
         emit EntryFeeUpdated(_newEntryFee);
     }
+
+    /// @notice returns the board of a player for a game
+    /// @param  _gameIndex index of the game to of which the user wants their board
+    /// @return board in bytes32 fformat.
+    function getBoard(uint256 _gameIndex) external view returns(bytes32){
+        return bytes32(_playerBoard[_gameIndex][msg.sender]);
+    }
+
+    /// @notice creates a game of bingo 
+    /// @dev increase game counter and sets the games start time and entry fee
     function createGame() external {
         gameCount++; // First game index is 1
         games[gameCount].startTime = block.timestamp;
         games[gameCount].gameEntryFee = entryFee;
         emit GameCreated(gameCount);
     }
-    // getter function for board 
-    function getBoard(uint256 _gameIndex) external view returns(bytes32){
-        return bytes32(_playerBoard[_gameIndex][msg.sender]);
-    }
 
+    /// @notice function to join a game.
+    /// @param _gameIndex index of the game to join
     function joinGame(uint256 _gameIndex) external {
         // TODO: add check current timestamp is greater than game start time (Game exists)
         GameData memory game = games[_gameIndex];
@@ -127,6 +151,8 @@ contract Bingo is Ownable {
         emit PlayerJoined(msg.sender, _gameIndex);
     }
 
+    /// @notice function to draw a number for a game.
+    /// @param _gameIndex index of the game to join
     function draw(uint256 _gameIndex) external {
         uint256 currentTime = block.timestamp;
         GameData storage game = games[_gameIndex];
@@ -138,6 +164,11 @@ contract Bingo is Ownable {
         game.lastDrawTime = currentTime;
         emit Draw(_gameIndex, numberDrawn);
     }
+
+    /// @notice function for the players to call bingo if they win
+    /// @param _gameIndex index of the game to join
+    /// @param patternIndex indexs of the patter which is user has marked for bingo
+    /// @param drawnIndexes indexs of the number which are drawn to mark the bingo pattern.
     function callBingo(uint256 _gameIndex, uint256 patternIndex, uint256[5] calldata drawnIndexes) public {
         uint256[5] memory pattern;
         address sender = msg.sender;

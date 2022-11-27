@@ -18,11 +18,11 @@ contract BingoGame is Ownable, IBingoGame {
 
     struct GameData {
         bool isGameComplete;
-        uint64 startTime; //check uint64
-        uint64 lastDrawTime; //check uint64
+        uint64 startTime;
+        uint64 lastDrawTime;
         uint256 gameEntryFee;
         uint256 playerCount;
-        bytes drawnNumbers; //check uint8
+        bytes drawnNumbers;
     }
 
     uint8[5][12] private _PATTERNS = [
@@ -39,14 +39,13 @@ contract BingoGame is Ownable, IBingoGame {
         [0, 6, 17, 23, 0],
         [4, 8, 15, 19, 0]
     ];
-    // TODO: check gas costs during hardhat tests for uint8
 
     // only first 24 bytes are stored but using bytes32 saves type conversion costs during operations
     // gameId => player's Address => board
-    mapping(uint256 => mapping(address => bytes32)) private _playerBoard; //TODO: explore bytes
-    //TODO: readable getter
+    mapping(uint256 => mapping(address => bytes32)) private _playerBoard;
 
     uint256 public entryFee;
+    // feeToken is assumed to be constant for a given contract to avoid complexity
     IERC20 public immutable feeToken;
 
     // Host cannot start draw for the first time in a game until this duration is complete
@@ -135,28 +134,28 @@ contract BingoGame is Ownable, IBingoGame {
     /// @param _gameIndex index of the game to join
     function joinGame(uint256 _gameIndex) external {
         GameData memory game = games[_gameIndex];
-        require(!game.isGameComplete, "Bingo: game over");
-        require(block.timestamp > game.startTime && game.startTime != 0, "Bingo: game not created");
+        // sanitaion checks
+        require(game.startTime != 0, "Bingo: game not created");
         require(game.drawnNumbers.length == 0, "Bingo: game in progress");
         require(
             _playerBoard[_gameIndex][msg.sender] == bytes32(0),
             "Bingo: cannot join twice"
         );
+        require(!game.isGameComplete, "Bingo: game over");
 
-        uint256 playerCount = game.playerCount;
         bytes32 blockHash = blockhash(block.number - 1);
 
         // board Index starts from 0
         // playerCount is used to ensure that no board collision happens in a single block for a given gameIndex
         // gameIndex is used to achieve different boards with saame player count and block number
         _playerBoard[_gameIndex][msg.sender] = keccak256(
-            abi.encodePacked(blockHash, playerCount, _gameIndex)
+            abi.encodePacked(blockHash, game.playerCount, _gameIndex)
         ).keepFirst24Bytes();
         games[_gameIndex].playerCount++;
 
         feeToken.safeTransferFrom(msg.sender, address(this), entryFee);
 
-        emit PlayerJoined(msg.sender, _gameIndex);
+        emit PlayerJoined(_gameIndex, msg.sender);
     }
 
     /// @notice function to draw a number for a game.
@@ -165,6 +164,7 @@ contract BingoGame is Ownable, IBingoGame {
         uint64 currentTime = uint64(block.timestamp);
         GameData storage game = games[_gameIndex];
 
+        // second case will be invoked for first draw in a game
         game.drawnNumbers.length != 0
             ? require(
                 currentTime >= game.lastDrawTime + minTurnDuration,
@@ -208,7 +208,7 @@ contract BingoGame is Ownable, IBingoGame {
             require(
                 board[31 - pattern[i]] ==
                     game.drawnNumbers[_drawnIndexes[i]],
-                "Bingo: drawn number and board number don't match"
+                "Bingo: incorrect claim"
             );
         }
 

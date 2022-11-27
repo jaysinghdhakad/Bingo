@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.17;
 
+
 /**
- * @dev Interface for the Bingo Game contarct.
+ * @dev Interface for the Bingo Game contract
  */
 interface IBingoGame {
     /**
@@ -28,7 +29,7 @@ interface IBingoGame {
     /**
      * @dev Emintted when A player with address "player" joins a game with game Index "gameIndex" on BingoGame is updated
      * */
-    event PlayerJoined(address indexed player, uint256 indexed gameIndex);
+    event PlayerJoined(uint256 indexed gameIndex, address indexed player);
 
     /**
      * @dev Emitted when a number is drawn for a game with game index "gameIndex"
@@ -81,7 +82,10 @@ interface IBingoGame {
      * */
     function draw(uint256 _gameIndex) external;
 
-    // Todo : write description
+    /**
+     * @dev registers a new bingo game, entry fee is set at game creation and connot be updated later
+     * Emits the GameCreated event
+     * */
     function createGame() external;
 
     /**

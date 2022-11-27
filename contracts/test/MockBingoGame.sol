@@ -4,7 +4,7 @@ pragma solidity =0.8.17;
 import "contracts/BingoGame.sol";
 
 contract MockBingoGame is BingoGame {
-     constructor(
+    constructor(
         address _feeToken,
         uint256 _entryFee,
         uint256 _minJoinDuration,

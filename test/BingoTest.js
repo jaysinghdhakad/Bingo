@@ -11,8 +11,8 @@ let player4;
 let bingo;
 let erc20;
 const entryFee = 10000;
-const minTurnWait = 180000; // in milli seconds
-const minJoinWindow = 180000; // in milli seconds
+const minTurnWait = 180;
+const minJoinWindow = 180;
 const patterns = [
   [0, 1, 2, 3, 4],
   [5, 6, 7, 8, 9],
@@ -208,13 +208,15 @@ describe("Bingo Game", function () {
 
     await bingo.connect(player1).joinGame(gameCount);
 
-    await expect(bingo.draw(gameCount)).to.be.revertedWith(
-      "Bingo: game not started"
+    await expect(bingo.draw(gameCount)).to.be.revertedWithCustomError(
+      bingo,
+      "GameNotStarted"
     );
     await time.increase(minJoinWindow);
     await bingo.draw(gameCount);
-    await expect(bingo.connect(player2).joinGame(gameCount)).to.be.revertedWith(
-      "Bingo: game in progress"
+    await expect(bingo.connect(player2).joinGame(gameCount)).to.be.revertedWithCustomError(
+      bingo,
+      "GameInProgress"
     );
   });
 
@@ -222,17 +224,20 @@ describe("Bingo Game", function () {
     let gameCount = 0;
     await bingo.connect(owner).createGame();
     gameCount++;
-    await expect(bingo.draw(gameCount)).to.be.revertedWith(
-      "Bingo: game not started"
+    await expect(bingo.draw(gameCount)).to.be.revertedWithCustomError(
+      bingo,
+      "GameNotStarted"
     );
     await time.increase(minJoinWindow);
     await bingo.draw(gameCount);
-    await expect(bingo.draw(gameCount)).to.be.rejectedWith(
-      "Bingo: wait for next turn"
+    await expect(bingo.draw(gameCount)).to.be.revertedWithCustomError(
+      bingo,
+      "WaitForNextTurn"
     );
     await time.increase(minTurnWait);
     await bingo.draw(gameCount);
   });
+
   for (let j = 0; j < patterns.length; j++) {
     it(`Winner with pattern ${j} takes all the fee`, async function () {
       let gameCount = 0;
@@ -263,12 +268,13 @@ describe("Bingo Game", function () {
         drawnIndexes.push(i);
       }
       await bingo.setDrawNumbers(numbersToSet, gameCount);
-      await bingo.connect(player1).bingo(gameCount, j, drawnIndexes);
+      await bingo.connect(player1).bingo(gameCount);
 
       expect(await erc20.balanceOf(bingo.address)).to.be.equal(0);
       expect(await erc20.balanceOf(player1.address)).to.be.equal(2 * entryFee);
     });
   }
+
   it("Can't retrive the board of a player not joined game", async function () {
     let gameCount = 0;
     await bingo.connect(owner).createGame();
@@ -276,21 +282,13 @@ describe("Bingo Game", function () {
     await expect(bingo.getBoard(gameCount, player1.address)).to.be.reverted;
   });
 
-  it("Can't call bingo with wrong pattern index", async function () {
-    let gameCount = 0;
-    let drawnIndexes = [1, 2, 3, 4, 5];
-    await bingo.connect(owner).createGame();
-    gameCount++;
-    await expect(bingo.connect(player1).bingo(gameCount, 13, drawnIndexes)).to
-      .be.reverted;
-  });
 
   it("Can't call bingo without joining a game", async function () {
     let gameCount = 0;
     let drawnIndexes = [1, 2, 3, 4, 5];
     await bingo.connect(owner).createGame();
     gameCount++;
-    await expect(bingo.connect(player1).bingo(gameCount, 1, drawnIndexes)).to.be
+    await expect(bingo.connect(player1).bingo(gameCount)).to.be
       .reverted;
   });
 

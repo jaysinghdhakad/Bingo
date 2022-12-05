@@ -15,7 +15,7 @@ contract MockBingoGame is BingoGame {
 
     function setDrawNumbers(uint8[] calldata numbers, uint256 _gameIndex) external {
         for(uint256 i; i < numbers.length; i++){
-             games[_gameIndex].drawnNumbers.push(bytes1(numbers[i]));
+             games[_gameIndex].drawnNumbers[numbers[i]] = true;
         }
     }
 

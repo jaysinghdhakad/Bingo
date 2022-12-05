@@ -18,11 +18,12 @@ contract BingoGame is Ownable, IBingoGame {
 
     struct GameData {
         bool isGameComplete;
+        bool isGameInProcess;
         uint64 startTime; //check uint64
         uint64 lastDrawTime; //check uint64
         uint256 gameEntryFee;
         uint256 playerCount;
-        bytes drawnNumbers; //check uint8
+        mapping(uint8 => bool) drawnNumbers; //check uint8
     }
 
     uint8[5][12] private _PATTERNS = [
@@ -114,7 +115,7 @@ contract BingoGame is Ownable, IBingoGame {
         address _player
     ) external view returns (uint8[24] memory _board) {
         bytes32 boardBytes = _playerBoard[_gameIndex][_player];
-        require(boardBytes != bytes32(0), "Bingo: not a player");
+        if(boardBytes == bytes32(0)) revert NotAPlayer();
         for (uint256 i; i < 24; i++) {
             _board[i] = uint8(boardBytes[31-i]);
         }
@@ -122,26 +123,24 @@ contract BingoGame is Ownable, IBingoGame {
 
     /// @notice creates a game of bingo
     /// @dev increase game counter and sets the games start time and entry fee
-    function createGame() external {
+    function createGame() external returns(uint256){
         gameCount++; // First game index is 1
         games[gameCount].startTime = uint64(block.timestamp);
         // entryFee for a game cannot be changed once a game is created
         games[gameCount].gameEntryFee = entryFee;
 
         emit GameCreated(gameCount);
+        return gameCount;
     }
 
     /// @notice function to join a game.
     /// @param _gameIndex index of the game to join
     function joinGame(uint256 _gameIndex) external {
-        GameData memory game = games[_gameIndex];
-        require(!game.isGameComplete, "Bingo: game over");
-        require(block.timestamp > game.startTime && game.startTime != 0, "Bingo: game not created");
-        require(game.drawnNumbers.length == 0, "Bingo: game in progress");
-        require(
-            _playerBoard[_gameIndex][msg.sender] == bytes32(0),
-            "Bingo: cannot join twice"
-        );
+        GameData storage game = games[_gameIndex];
+        if(game.isGameComplete) revert GameIsOver();
+        if(game.startTime == 0) revert GameNotCreated();
+        if(game.isGameInProcess) revert GameInProgress();
+        if(_playerBoard[_gameIndex][msg.sender] != bytes32(0)) revert CannotJoinTwice();
 
         uint256 playerCount = game.playerCount;
         bytes32 blockHash = blockhash(block.number - 1);
@@ -154,9 +153,9 @@ contract BingoGame is Ownable, IBingoGame {
         ).keepFirst24Bytes();
         games[_gameIndex].playerCount++;
 
-        feeToken.safeTransferFrom(msg.sender, address(this), entryFee);
+        feeToken.safeTransferFrom(msg.sender, address(this), game.gameEntryFee);
 
-        emit PlayerJoined(msg.sender, _gameIndex);
+        emit PlayerJoined(_gameIndex, msg.sender);
     }
 
     /// @notice function to draw a number for a game.
@@ -164,58 +163,53 @@ contract BingoGame is Ownable, IBingoGame {
     function draw(uint256 _gameIndex) external {
         uint64 currentTime = uint64(block.timestamp);
         GameData storage game = games[_gameIndex];
+        if(game.isGameComplete) revert GameIsOver();
 
-        game.drawnNumbers.length != 0
-            ? require(
-                currentTime >= game.lastDrawTime + minTurnDuration,
-                "Bingo: wait for next turn"
-            )
-            : require(
-                currentTime >= game.startTime + minJoinDuration,
-                "Bingo: game not started"
-            );
+        if(game.isGameInProcess){
+            if(currentTime < game.lastDrawTime + minTurnDuration) revert WaitForNextTurn();
+        } else {
+            if(currentTime < game.startTime + minJoinDuration) revert GameNotStarted();
+            game.isGameInProcess = true;
+        }
 
-        bytes1 numberDrawn = (blockhash(block.number - 1)[0]);
-        game.drawnNumbers.push(numberDrawn);
+        uint8 numberDrawn = uint8(blockhash(block.number - 1)[0]);
+        game.drawnNumbers[numberDrawn] = true;
         game.lastDrawTime = currentTime;
-
-        emit Draw(_gameIndex);
+        
+        emit Draw(_gameIndex, numberDrawn);
     }
 
     /// @notice function for the players to call bingo if they win
     /// @param _gameIndex index of the game to join
-    /// @param _patternIndex indexs of the patter which is user has marked for bingo
-    /// @param _drawnIndexes indexs of the number which are drawn to mark the bingo pattern.
     function bingo(
-        uint256 _gameIndex,
-        uint256 _patternIndex,
-        uint256[5] calldata _drawnIndexes
+        uint256 _gameIndex
     ) public {
-        require(_patternIndex < 12, "Bingo: wrong pattern index");
-
-        uint8[5] memory pattern = _PATTERNS[_patternIndex];
-        GameData memory game = games[_gameIndex];
+        GameData storage game = games[_gameIndex];
         bytes32 board = _playerBoard[_gameIndex][msg.sender];
+        require(board != bytes32(0), "Bingo: not a player");
+        bool result = true;
 
-        uint256 patternLength = (_patternIndex == 2 ||
-            _patternIndex == 7 ||
-            _patternIndex == 10 ||
-            _patternIndex == 11)
+        for(uint j; j < 12 ; j++){
+            uint8[5] memory pattern = _PATTERNS[j];
+            uint256 patternLength = (j == 2 ||
+            j == 7 ||
+            j == 10 ||
+            j == 11)
             ? 4
             : 5;
 
-        for (uint256 i; i < patternLength; i++) {
-            require(
-                board[31 - pattern[i]] ==
-                    game.drawnNumbers[_drawnIndexes[i]],
-                "Bingo: drawn number and board number don't match"
-            );
+            for (uint256 i; i < patternLength; i++) {
+                result = result &&  game.drawnNumbers[uint8(board[31 - pattern[i]])];
+            }
+            if(result) break;
+            if(j < 11) result = true;
         }
-
+        if(!result) revert BingoCheckFailed();
+       
         uint256 totalFee = game.gameEntryFee * game.playerCount;
         feeToken.safeTransfer(msg.sender, totalFee);
 
         games[_gameIndex].isGameComplete = true;
-        emit GameOver(_gameIndex);
+        emit GameOver(_gameIndex, msg.sender, totalFee);
     }
 }
